@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Fretboard Simon 2.3 Guitar Input</title>
+<style>
+:root{
+  --bg:#070c13; --panel:#111a26; --border:#344152; --text:#e9eef7;
+  --muted:#aeb9c8; --green:#4FA36A; --red:#C95C5C;
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0; width:100%; min-height:100%; overflow:hidden;
+  background:radial-gradient(circle at 50% 0%,#182235 0%,#0b0f17 42%,#05070b 100%);
+  color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  -webkit-user-select:none; user-select:none; touch-action:manipulation;
+}
+body{display:flex;justify-content:center;align-items:flex-start}
+.app{
+  width:min(100vw,430px); min-height:100dvh; position:relative;
+  padding:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
+}
+.title{
+  height:26px; display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:900;letter-spacing:2px;color:rgba(235,242,255,.8);
+}
+.status{
+  height:70px; margin:4px 0 4px; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center;
+}
+.status-main{font-size:19px;font-weight:950;min-height:24px}
+.status-sub{font-size:11px;color:var(--muted);font-weight:800;margin-top:5px;min-height:14px}
+.board-area{
+  position:relative; height:calc(100dvh - 150px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height:610px; display:flex;justify-content:center;align-items:flex-start;overflow:visible;
+}
+.gm-exact-wrap{
+  position:absolute; top:0; left:50%; width:223px;height:682px;
+  transform:translateX(-50%) scale(var(--board-scale,1)); transform-origin:top center;
+}
+.gm-exact-shell{position:absolute;left:20px;top:0;width:183px;height:642px;padding-top:56px}
+.gm-exact-openrow{position:absolute;left:0;top:0;width:183px;height:56px}
+.gm-exact-nut{
+  position:absolute;left:0;top:52px;width:183px;height:14px;border-radius:4px;
+  background:linear-gradient(90deg,#d9dee6,#f8fbff,#cbd2dc);
+  box-shadow:0 2px 4px rgba(0,0,0,.5);z-index:15
+}
+.gm-exact-board{
+  position:relative;width:183px;height:586px;
+  background:linear-gradient(90deg,#3a2418 0%,#5b3824 50%,#3a2418 100%);
+  border-radius:0 0 8px 8px;box-shadow:inset 0 0 22px rgba(0,0,0,.42),0 7px 18px rgba(0,0,0,.40);
+  overflow:visible;isolation:isolate
+}
+.gm-exact-fret{
+  position:absolute;left:0;width:183px;height:3px;
+  background:linear-gradient(180deg,#f0f3f7,#8e959e);z-index:8;box-shadow:0 1px 1px rgba(0,0,0,.55)
+}
+.gm-exact-string{
+  position:absolute;top:0;height:586px;transform:translateX(-50%);border-radius:999px;
+  background:linear-gradient(90deg,#6f747b,#edf0f4 42%,#838991 70%);
+  z-index:12;box-shadow:1px 0 2px rgba(0,0,0,.45)
+}
+.gm-exact-inlay{
+  position:absolute;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);
+  background:rgba(230,236,244,.42);z-index:5
+}
+.hit{
+  position:absolute;width:34px;height:34px;border-radius:50%;
+  transform:translate(-50%,-50%);z-index:30;background:transparent;
+  -webkit-tap-highlight-color:transparent;
+}
+.note-mark{
+  position:absolute;width:31px;height:31px;border-radius:50%;
+  transform:translate(-50%,-50%);z-index:40;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--green);color:#07101a;font-size:12px;font-weight:950;
+  box-shadow:0 3px 10px rgba(0,0,0,.45),0 0 0 2px rgba(255,255,255,.16);
+  pointer-events:none;
+}
+.note-mark.wrong{
+  background:#dfe6f0;
+  color:#07101a;
+  font-size:20px;
+  line-height:1;
+}
+.controls{
+  position:absolute;left:10px;right:10px;bottom:calc(8px + env(safe-area-inset-bottom));
+  display:flex;justify-content:center;gap:8px;z-index:100;
+}
+button{
+  appearance:none;border:1px solid rgba(132,150,174,.42);border-radius:10px;
+  background:linear-gradient(180deg,#182436,#090f18);color:var(--text);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 3px 8px rgba(0,0,0,.32);
+  font:850 11px/1 inherit;padding:8px 14px;min-height:36px;
+}
+button:active{background:linear-gradient(180deg,#dfe6f0,#9daaba);color:#07101a}
+
+/* v0.2 — match Chord Compass iPhone workspace exactly:
+   left third controls, right two-thirds fretboard. */
+.app{
+  width:min(100vw,430px);
+  min-height:100dvh;
+  padding:calc(10px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom));
+}
+.title{height:24px;margin:0 0 6px;font-size:11px;letter-spacing:1.7px}
+.workspace{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,2fr);
+  gap:6px;
+  width:100%;
+  height:calc(100dvh - 48px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height:700px;
+  align-items:stretch;
+}
+.left-column{min-width:0;height:100%;position:relative;overflow:visible}
+.status{
+  height:auto;margin:0;padding:8px 3px;
+  border:1px solid rgba(132,150,174,.30);border-radius:12px;
+  background:rgba(255,255,255,.025);
+}
+.status-main{font-size:16px;line-height:1.05}
+.status-sub{font-size:9px;line-height:1.25}
+.start-left{
+  position:absolute;left:2px;right:2px;bottom:10px;width:calc(100% - 4px);
+  padding:7px 2px;font-size:10px;
+}
+.board-area{
+  position:relative;min-width:0;height:100%;
+  display:flex;justify-content:center;align-items:flex-start;
+  overflow:hidden;
+}
+.gm-exact-wrap{
+  position:absolute;
+  top:0;
+  left:50%;
+  width:223px;
+  height:682px;
+  transform:translateX(-50%) scale(var(--board-scale,1));
+  transform-origin:top center;
+}
+.controls{display:none!important}
+
+
+/* v0.8 persistent C-major map */
+.scale-note{
+  position:absolute;width:31px;height:31px;border-radius:50%;
+  transform:translate(-50%,-50%);z-index:25;
+  display:flex;align-items:center;justify-content:center;
+  color:white;font-size:12px;font-weight:950;
+  box-shadow:0 3px 10px rgba(0,0,0,.45);
+  pointer-events:none;
+  transition:background .08s ease,color .08s ease,box-shadow .08s ease;
+}
+.scale-note.in-key{background:var(--green)}
+.scale-note.tendency{background:#86c79a;color:#07101a}
+.scale-note.out-key{display:none}
+.scale-note.flash{
+  background:#fff !important;color:#07101a !important;
+  box-shadow:0 0 0 2px rgba(255,255,255,.45),0 0 14px rgba(255,255,255,.75) !important;
+}
+.test-region{
+  position:absolute;left:-5px;width:193px;
+  border:5px solid #4d9cff;border-radius:8px;
+  z-index:22;pointer-events:none;
+  box-shadow:0 0 0 2px rgba(225,240,255,.72),0 0 18px rgba(77,156,255,.72);
+}
+.note-mark{display:none!important}
+
+
+.shard{
+  position:absolute; z-index:60; pointer-events:none;
+  background:#4d9cff;
+  box-shadow:0 0 5px rgba(77,156,255,.75);
+  transform-origin:center;
+  transition:transform .55s ease-out, opacity .55s ease-out;
+}
+
+
+/* v1.3 focused play view */
+.gm-exact-wrap{
+  transition:transform 1.15s cubic-bezier(.22,.61,.36,1), top 1.15s cubic-bezier(.22,.61,.36,1);
+}
+.board-area.focused{
+  overflow:visible;
+  z-index:80;
+}
+.board-area.focused .gm-exact-wrap{
+  transition:transform 1.15s cubic-bezier(.22,.61,.36,1);
+}
+.left-column.play-hidden{
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .22s ease;
+}
+.left-column{transition:opacity .22s ease}
+
+
+.level-panel{margin-top:10px}
+.level-title{text-align:center;color:var(--muted);font-size:9px;font-weight:950;letter-spacing:.7px;margin-bottom:5px}
+.level-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.level-btn{min-width:0;min-height:34px;padding:4px;font-size:12px}
+.level-btn.active{background:linear-gradient(180deg,#dfe6f0,#9daaba);color:#07101a;border-color:#e9eef7}
+.level-desc{text-align:center;color:var(--muted);font-size:9px;font-weight:800;line-height:1.2;margin-top:6px;min-height:24px}
+
+
+.audio-status{
+  margin-top:6px; min-height:26px; display:flex; align-items:center; justify-content:center;
+  padding:5px 4px; border:1px solid rgba(132,150,174,.30); border-radius:9px;
+  background:rgba(255,255,255,.025); color:var(--muted);
+  font-size:9px; font-weight:900; text-align:center; line-height:1.15;
+}
+.audio-status.ready{color:#bfe9c9;border-color:rgba(79,163,106,.55)}
+.audio-status.blocked{color:#ffd0d0;border-color:rgba(201,92,92,.62)}
+.start-stack{
+  position:absolute; left:2px; right:2px; bottom:10px;
+  display:flex; flex-direction:column; gap:6px;
+}
+.start-stack .start-left{
+  position:static !important; left:auto !important; right:auto !important;
+  bottom:auto !important; width:100% !important;
+}
+.audio-test{width:100%;min-height:32px;padding:5px 2px;font-size:10px}
+
+
+.input-panel{margin-top:8px}
+.input-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.input-btn{min-width:0;min-height:32px;padding:4px 2px;font-size:10px}
+.input-btn.active{
+  background:linear-gradient(180deg,#dfe6f0,#9daaba);
+  color:#07101a;border-color:#e9eef7;
+}
+.mic-status{
+  margin-top:5px;min-height:22px;display:flex;align-items:center;justify-content:center;
+  padding:4px;border:1px solid rgba(132,150,174,.26);border-radius:8px;
+  color:var(--muted);background:rgba(255,255,255,.02);
+  font-size:8.5px;font-weight:850;text-align:center;line-height:1.15;
+}
+.mic-status.ready{color:#bfe9c9;border-color:rgba(79,163,106,.55)}
+.mic-status.listening{color:#d7e8ff;border-color:rgba(77,156,255,.62)}
+.mic-status.blocked{color:#ffd0d0;border-color:rgba(201,92,92,.62)}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="title">FRETBOARD SIMON · GUITAR</div>
+  <div class="workspace">
+    <div class="left-column">
+      <div class="status">
+        <div class="status-main" id="statusMain">Tap Start</div>
+        <div class="status-sub" id="statusSub">Watch, then repeat.</div>
+      </div>
+      <div class="audio-status" id="audioStatus">Audio: not started</div>
+      <div class="input-panel">
+        <div class="level-title">INPUT</div>
+        <div class="input-grid">
+          <button class="input-btn active" id="tapModeBtn">Tap</button>
+          <button class="input-btn" id="guitarModeBtn">Guitar</button>
+        </div>
+        <div class="mic-status" id="micStatus">Mic: off</div>
+      </div>
+      <div class="level-panel">
+        <div class="level-title">LEVEL</div>
+        <div class="level-grid">
+          <button class="level-btn active" data-level="1">1</button>
+          <button class="level-btn" data-level="2">2</button>
+          <button class="level-btn" data-level="3">3</button>
+          <button class="level-btn" data-level="4">4</button>
+          <button class="level-btn" data-level="5">5</button>
+          <button class="level-btn" data-level="6">6</button>
+        </div>
+        <div class="level-desc" id="levelDesc">Pentatonic box</div>
+      </div>
+      <div class="start-stack">
+        <button id="audioTestBtn" class="audio-test">Test Sound</button>
+        <button id="startBtn" class="start-left">Start / Restart</button>
+      </div>
+    </div>
+    <div class="board-area" id="boardArea">
+    <div class="gm-exact-wrap" id="wrap">
+      <div class="gm-exact-shell">
+        <div class="gm-exact-openrow"></div>
+        <div class="gm-exact-nut"></div>
+        <div class="gm-exact-board" id="board"></div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BOARD_W=183, BOARD_H=586, TOTAL_FRETS=15, EDGE=7;
+const STRING_WIDTHS=[6,5,4,3,2,1];
+const STRING_X=Array.from({length:6},(_,i)=>EDGE+(BOARD_W-EDGE*2)*(i/5));
+const TUNING=[40,45,50,55,59,64]; // E A D G B E, low to high
+const NOTE_NAMES=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+
+const board=document.getElementById("board");
+const wrap=document.getElementById("wrap");
+const boardArea=document.getElementById("boardArea");
+const statusMain=document.getElementById("statusMain");
+const statusSub=document.getElementById("statusSub");
+const startBtn=document.getElementById("startBtn");
+const audioTestBtn=document.getElementById("audioTestBtn");
+const tapModeBtn=document.getElementById("tapModeBtn");
+const guitarModeBtn=document.getElementById("guitarModeBtn");
+const micStatus=document.getElementById("micStatus");
+const levelDesc=document.getElementById("levelDesc");
+const audioStatus=document.getElementById("audioStatus");
+const levelBtns=[...document.querySelectorAll(".level-btn")];
+
+const fretBoundary=f=>BOARD_H/TOTAL_FRETS*f;
+const fretCenter=f=>(fretBoundary(f-1)+fretBoundary(f))/2;
+// Position relative to the wooden board. Open strings sit above the nut.
+const noteY=f=>f===0 ? -35 : fretCenter(f);
+const stringX=i=>STRING_X[i];
+const midiAt=(s,f)=>TUNING[s]+f;
+const noteName=(s,f)=>NOTE_NAMES[((midiAt(s,f)%12)+12)%12];
+
+let sequence=[];
+let selectedLevel=1;
+let allowedPositions=[];
+let fretWindowStart=1;
+let userIndex=0;
+let accepting=false;
+let running=false;
+let token=0;
+let audioCtx=null;
+let currentMark=null;
+const scaleDots=new Map();
+let regionBox=null;
+
+// Input mode / microphone pitch tracking
+let inputMode="tap";
+let micStream=null;
+let micSource=null;
+let micAnalyser=null;
+let micBuffer=null;
+let micTimer=null;
+let micBusy=false;
+let micCandidateMidi=null;
+let micCandidateSince=0;
+let micLockedUntilRelease=false;
+let micLastAcceptedMidi=null;
+let micSilenceSince=0;
+let micIgnoreUntil=0;
+
+
+function buildBoard(){
+  for(let f=1;f<=TOTAL_FRETS;f++){
+    const el=document.createElement("div");
+    el.className="gm-exact-fret";
+    el.style.top=(fretBoundary(f)-1.5)+"px";
+    board.appendChild(el);
+  }
+  for(let i=0;i<6;i++){
+    const el=document.createElement("div");
+    el.className="gm-exact-string";
+    el.style.left=stringX(i)+"px";
+    el.style.width=STRING_WIDTHS[i]+"px";
+    board.appendChild(el);
+  }
+  [3,5,7,9,15].forEach(f=>{
+    const el=document.createElement("div");
+    el.className="gm-exact-inlay";
+    el.style.left=(BOARD_W/2)+"px";
+    el.style.top=fretCenter(f)+"px";
+    board.appendChild(el);
+  });
+  [0.3,0.7].forEach(p=>{
+    const el=document.createElement("div");
+    el.className="gm-exact-inlay";
+    el.style.left=(BOARD_W*p)+"px";
+    el.style.top=fretCenter(12)+"px";
+    board.appendChild(el);
+  });
+  for(let s=0;s<6;s++){
+    for(let f=0;f<=TOTAL_FRETS;f++){
+      const hit=document.createElement("div");
+      hit.className="hit";
+      hit.style.left=stringX(s)+"px";
+      hit.style.top=noteY(f)+"px";
+      hit.dataset.string=s; hit.dataset.fret=f;
+      hit.style.pointerEvents="auto";
+      hit.addEventListener("pointerdown",(e)=>{
+        e.preventDefault();
+        e.stopPropagation();
+        if(inputMode==="guitar"){
+          // In Guitar mode the fretboard is display-only; answers come from the microphone.
+          return;
+        }
+        if(!running){ ensureAudio().then(()=>startGame()); return; }
+        ensureAudio().then(()=>handleUserNote(s,f));
+      },{passive:false});
+      board.appendChild(hit);
+
+      const dot=document.createElement("div");
+      const pc=((midiAt(s,f)%12)+12)%12;
+      const inC=[0,2,4,5,7,9,11].includes(pc);
+      const tendency=inC && (pc===5 || pc===11);
+      dot.className="scale-note "+(inC?(tendency?"in-key tendency":"in-key"):"out-key");
+      dot.style.left=stringX(s)+"px";
+      dot.style.top=noteY(f)+"px";
+      dot.textContent=noteName(s,f);
+      board.appendChild(dot);
+      scaleDots.set(`${s}:${f}`,dot);
+    }
+  }
+  regionBox=document.createElement("div");
+  regionBox.className="test-region";
+  board.appendChild(regionBox);
+}
+buildBoard();
+
+function fitBoard(){
+  const availableH=boardArea.clientHeight;
+  const availableW=boardArea.clientWidth;
+  const scale=Math.min(1, availableH/682, availableW/223);
+  wrap.style.setProperty("--board-scale",scale);
+}
+window.addEventListener("resize",fitBoard,{passive:true});
+fitBoard();
+
+let audioUnlocked=false;
+function setAudioStatus(kind,text){
+  if(!audioStatus) return;
+  audioStatus.classList.remove("ready","blocked");
+  if(kind) audioStatus.classList.add(kind);
+  audioStatus.textContent=text;
+}
+async function ensureAudio(){
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC){
+      setAudioStatus("blocked","Audio: unsupported");
+      return false;
+    }
+    if(!audioCtx) audioCtx=new AC();
+    if(audioCtx.state==="suspended"){
+      try{ await audioCtx.resume(); }catch(e){}
+    }
+    if(!audioUnlocked && audioCtx.state==="running"){
+      try{
+        const b=audioCtx.createBuffer(1,1,audioCtx.sampleRate);
+        const src=audioCtx.createBufferSource();
+        const g=audioCtx.createGain();
+        g.gain.value=0.00001;
+        src.buffer=b; src.connect(g); g.connect(audioCtx.destination);
+        src.start(0);
+        audioUnlocked=true;
+      }catch(e){}
+    }
+    const ok=audioCtx.state==="running";
+    setAudioStatus(ok?"ready":"blocked", ok?"Audio: ready":"Audio: blocked — tap Test Sound");
+    return ok;
+  }catch(e){
+    setAudioStatus("blocked","Audio: blocked");
+    return false;
+  }
+}
+async function playTone(midi,duration=.42){
+  const ok=await ensureAudio();
+  if(!ok) return;
+  const now=audioCtx.currentTime;
+  const freq=440*Math.pow(2,(midi-69)/12);
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  const filter=audioCtx.createBiquadFilter();
+  osc.type="triangle";
+  osc.frequency.setValueAtTime(freq,now);
+  filter.type="lowpass"; filter.frequency.value=1800;
+  gain.gain.setValueAtTime(0.0001,now);
+  gain.gain.exponentialRampToValueAtTime(0.22,now+.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001,now+duration);
+  osc.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(now); osc.stop(now+duration+.03);
+}
+
+
+function setMicStatus(kind,text){
+  if(!micStatus) return;
+  micStatus.classList.remove("ready","listening","blocked");
+  if(kind) micStatus.classList.add(kind);
+  micStatus.textContent=text;
+}
+
+function noteLabelFromMidi(m){
+  const names=["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+  const n=Math.round(m);
+  return names[((n%12)+12)%12] + (Math.floor(n/12)-1);
+}
+
+async function enableMicrophone(){
+  if(micStream && micAnalyser){
+    setMicStatus("ready","Mic: ready");
+    startMicLoop();
+    return true;
+  }
+
+  if(!window.isSecureContext){
+    setMicStatus("blocked","Mic: HTTPS required");
+    return false;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    setMicStatus("blocked","Mic: unavailable");
+    return false;
+  }
+
+  const audioOK=await ensureAudio();
+  if(!audioOK){
+    setMicStatus("blocked","Mic: audio blocked");
+    return false;
+  }
+
+  try{
+    setMicStatus("","Mic: requesting permission…");
+    micStream=await navigator.mediaDevices.getUserMedia({
+      audio:{
+        echoCancellation:false,
+        noiseSuppression:false,
+        autoGainControl:false,
+        channelCount:1
+      }
+    });
+    micSource=audioCtx.createMediaStreamSource(micStream);
+    micAnalyser=audioCtx.createAnalyser();
+    micAnalyser.fftSize=2048;
+    micAnalyser.smoothingTimeConstant=0;
+    micBuffer=new Float32Array(micAnalyser.fftSize);
+    micSource.connect(micAnalyser); // intentionally NOT connected to speakers
+    setMicStatus("ready","Mic: ready");
+    startMicLoop();
+    return true;
+  }catch(err){
+    const msg=(err && err.name==="NotAllowedError") ? "Mic: permission denied" : "Mic: unavailable";
+    setMicStatus("blocked",msg);
+    return false;
+  }
+}
+
+function stopMicrophone(){
+  if(micTimer){ clearTimeout(micTimer); micTimer=null; }
+  if(micSource){ try{ micSource.disconnect(); }catch(e){} micSource=null; }
+  if(micStream){
+    micStream.getTracks().forEach(t=>t.stop());
+    micStream=null;
+  }
+  micAnalyser=null; micBuffer=null;
+  micCandidateMidi=null; micCandidateSince=0;
+  micLockedUntilRelease=false; micLastAcceptedMidi=null; micSilenceSince=0;
+  setMicStatus("","Mic: off");
+}
+
+// YIN-style monophonic pitch detector, tuned for standard guitar range.
+// Returns Hz or null. Guitar range here is ~E2 through the top of this 15-fret board.
+function detectGuitarPitch(buf,sampleRate){
+  const N=buf.length;
+  let mean=0;
+  for(let i=0;i<N;i++) mean+=buf[i];
+  mean/=N;
+
+  let rms=0;
+  const x=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const v=buf[i]-mean;
+    // light Hann window
+    const w=.5-.5*Math.cos((2*Math.PI*i)/(N-1));
+    x[i]=v*w;
+    rms+=v*v;
+  }
+  rms=Math.sqrt(rms/N);
+  if(rms<0.012) return null;
+
+  const minFreq=72, maxFreq=900;
+  const tauMin=Math.max(2,Math.floor(sampleRate/maxFreq));
+  const tauMax=Math.min(Math.floor(sampleRate/minFreq),Math.floor(N/2)-1);
+  const diff=new Float32Array(tauMax+1);
+
+  for(let tau=1;tau<=tauMax;tau++){
+    let sum=0;
+    const lim=N-tau;
+    for(let i=0;i<lim;i++){
+      const d=x[i]-x[i+tau];
+      sum+=d*d;
+    }
+    diff[tau]=sum;
+  }
+
+  let running=0;
+  let bestTau=-1;
+  let bestVal=1e9;
+  for(let tau=1;tau<=tauMax;tau++){
+    running+=diff[tau];
+    const cmnd = running>0 ? diff[tau]*tau/running : 1;
+    diff[tau]=cmnd;
+    if(tau>=tauMin && cmnd<bestVal){
+      bestVal=cmnd; bestTau=tau;
+    }
+    if(tau>=tauMin && cmnd<0.16){
+      // first local valley under threshold
+      if(tau===tauMax || diff[tau+1]>=cmnd){
+        bestTau=tau;
+        break;
+      }
+    }
+  }
+
+  if(bestTau<0 || bestVal>0.34) return null;
+
+  // Parabolic interpolation around the valley.
+  let tau=bestTau;
+  if(tau>1 && tau<tauMax){
+    const y0=diff[tau-1], y1=diff[tau], y2=diff[tau+1];
+    const denom=(2*y1-y2-y0);
+    if(Math.abs(denom)>1e-9) tau += .5*(y2-y0)/denom;
+  }
+  const freq=sampleRate/tau;
+  return (freq>=minFreq && freq<=maxFreq) ? freq : null;
+}
+
+function startMicLoop(){
+  if(micTimer) return;
+
+  const loop=async()=>{
+    micTimer=null;
+    if(!micAnalyser || inputMode!=="guitar"){
+      if(micAnalyser && inputMode==="guitar") micTimer=setTimeout(loop,70);
+      return;
+    }
+
+    // Only interpret guitar notes while the player is actually answering.
+    if(!running || !accepting || micBusy || performance.now()<micIgnoreUntil){
+      micCandidateMidi=null; micCandidateSince=0;
+      micTimer=setTimeout(loop,70);
+      return;
+    }
+
+    micAnalyser.getFloatTimeDomainData(micBuffer);
+    const freq=detectGuitarPitch(micBuffer,audioCtx.sampleRate);
+    const now=performance.now();
+
+    if(!freq){
+      micCandidateMidi=null; micCandidateSince=0;
+      if(micLockedUntilRelease){
+        if(!micSilenceSince) micSilenceSince=now;
+        if(now-micSilenceSince>=120){
+          micLockedUntilRelease=false;
+          micLastAcceptedMidi=null;
+          micSilenceSince=0;
+        }
+      }
+      setMicStatus("listening","Mic: listening");
+      micTimer=setTimeout(loop,70);
+      return;
+    }
+
+    micSilenceSince=0;
+    const midiFloat=69+12*Math.log2(freq/440);
+    const midi=Math.round(midiFloat);
+    const cents=100*(midiFloat-midi);
+
+    // Ignore badly out-of-tune/unstable estimates.
+    if(Math.abs(cents)>48){
+      micCandidateMidi=null; micCandidateSince=0;
+      setMicStatus("listening","Mic: listening");
+      micTimer=setTimeout(loop,70);
+      return;
+    }
+
+    setMicStatus("listening",`Mic: ${noteLabelFromMidi(midi)}`);
+
+    // After accepting a note, require release or a clearly different pitch
+    // before another answer can register.
+    if(micLockedUntilRelease){
+      if(micLastAcceptedMidi!==null && Math.abs(midi-micLastAcceptedMidi)>=1){
+        micLockedUntilRelease=false;
+        micLastAcceptedMidi=null;
+      }else{
+        micTimer=setTimeout(loop,70);
+        return;
+      }
+    }
+
+    if(micCandidateMidi!==midi){
+      micCandidateMidi=midi;
+      micCandidateSince=now;
+      micTimer=setTimeout(loop,70);
+      return;
+    }
+
+    // Require ~180 ms of stable pitch before accepting it.
+    if(now-micCandidateSince>=180){
+      micCandidateMidi=null; micCandidateSince=0;
+      micLockedUntilRelease=true;
+      micLastAcceptedMidi=midi;
+      micBusy=true;
+      await handleGuitarMidi(midi,freq);
+      micBusy=false;
+    }
+
+    micTimer=setTimeout(loop,70);
+  };
+
+  micTimer=setTimeout(loop,70);
+}
+
+function playCueTone(freq,start,duration,peak=.15,type="sine"){
+  const osc=audioCtx.createOscillator();
+  const gain=audioCtx.createGain();
+  osc.type=type;
+  osc.frequency.setValueAtTime(freq,start);
+  gain.gain.setValueAtTime(.0001,start);
+  gain.gain.exponentialRampToValueAtTime(peak,start+.012);
+  gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(start);
+  osc.stop(start+duration+.02);
+}
+async function playWrongCue(){
+  const ok=await ensureAudio();
+  if(!ok) return;
+  const t=audioCtx.currentTime+.08;
+  // Distinct descending error cue: A3 -> D3, two separated square/triangle tones.
+  // A short gap makes the downward motion unmistakable on an iPhone speaker.
+  playCueTone(220.00,t,.22,.20,"square");
+  playCueTone(146.83,t+.29,.30,.20,"triangle");
+}
+async function playSuccessCue(){
+  const ok=await ensureAudio();
+  if(!ok) return;
+  const t=audioCtx.currentTime+.025;
+  // Clean ascending C5 -> E5 -> G5 success chime.
+  playCueTone(523.25,t,.14,.13,"sine");
+  playCueTone(659.25,t+.13,.14,.13,"sine");
+  playCueTone(783.99,t+.26,.22,.14,"sine");
+}
+
+function clearMark(){
+  if(currentMark){ currentMark.remove(); currentMark=null; }
+}
+function focusTestRegion(){
+  // Expand the right-hand board area across the app while playing.
+  boardArea.style.position="fixed";
+  boardArea.style.left="0";
+  boardArea.style.right="0";
+  boardArea.style.top="calc(38px + env(safe-area-inset-top))";
+  boardArea.style.bottom="calc(8px + env(safe-area-inset-bottom))";
+  boardArea.style.width="100vw";
+  boardArea.style.height="auto";
+  boardArea.style.overflow="hidden";
+  boardArea.style.zIndex="80";
+  boardArea.classList.add("focused");
+  document.querySelector(".left-column").classList.add("play-hidden");
+
+  // Scale and center the ACTUAL selected shape. The rest of the fretboard remains
+  // present and simply moves outside the viewport as the selected section enlarges.
+  const xs=allowedPositions.map(p=>20+stringX(p.s)); // coordinates within 223px wrap
+  const ys=allowedPositions.map(p=>56+noteY(p.f));
+  const pad=24;
+  const minX=Math.min(...xs)-pad, maxX=Math.max(...xs)+pad;
+  const minY=Math.min(...ys)-pad, maxY=Math.max(...ys)+pad;
+  const regionW=maxX-minX, regionH=maxY-minY;
+
+  const targetH=Math.min(window.innerHeight*.70,560);
+  const targetW=Math.min(window.innerWidth*.90,390);
+  const scale=Math.min(2.25,targetH/regionH,targetW/regionW);
+
+  const rect=boardArea.getBoundingClientRect();
+  const regionCenterX=(minX+maxX)/2;
+  const regionCenterY=(minY+maxY)/2;
+  const wrapCenterX=223/2;
+  const dx=-(regionCenterX-wrapCenterX)*scale;
+  const y=(rect.height/2)-(regionCenterY*scale);
+
+  wrap.style.transform=`translateX(calc(-50% + ${dx}px)) translateY(${y}px) scale(${scale})`;
+}
+async function restoreFullBoard(){
+  boardArea.classList.remove("focused");
+
+  // First restore the board area to its exact grid-column geometry.
+  boardArea.style.position="relative";
+  boardArea.style.left="";
+  boardArea.style.right="";
+  boardArea.style.top="";
+  boardArea.style.bottom="";
+  boardArea.style.width="";
+  boardArea.style.height="100%";
+  boardArea.style.overflow="hidden";
+  boardArea.style.zIndex="";
+
+  document.querySelector(".left-column").classList.remove("play-hidden");
+
+  // Wait for the grid to reclaim the right-hand 2/3 column, then calculate
+  // the exact full-board scale from that restored space.
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  const availableH=boardArea.clientHeight;
+  const availableW=boardArea.clientWidth;
+  const fullScale=Math.min(1,availableH/682,availableW/223);
+
+  // Explicitly animate back to the full-board transform instead of relying
+  // on the earlier focused transform being overwritten indirectly.
+  wrap.style.transform=`translateX(-50%) translateY(0px) scale(${fullScale})`;
+  wrap.style.setProperty("--board-scale",fullScale);
+
+  await sleep(1150);
+}
+
+function shatterRegion(){
+  if(!regionBox) return;
+  const r={
+    left:parseFloat(regionBox.style.left)||-5,
+    top:parseFloat(regionBox.style.top)||0,
+    width:parseFloat(regionBox.style.width)||193,
+    height:parseFloat(regionBox.style.height)||160
+  };
+  regionBox.style.visibility="hidden";
+
+  const pieces=[];
+  // Break the four sides of the blue frame into short rectangular shards.
+  const n=7;
+  for(let i=0;i<n;i++){
+    const w=r.width/n;
+    pieces.push({x:r.left+i*w,y:r.top,w:w-2,h:5});
+    pieces.push({x:r.left+i*w,y:r.top+r.height-5,w:w-2,h:5});
+  }
+  for(let i=0;i<n;i++){
+    const h=r.height/n;
+    pieces.push({x:r.left,y:r.top+i*h,w:5,h:h-2});
+    pieces.push({x:r.left+r.width-5,y:r.top+i*h,w:5,h:h-2});
+  }
+  pieces.forEach((p,i)=>{
+    const el=document.createElement("div");
+    el.className="shard";
+    el.style.left=p.x+"px"; el.style.top=p.y+"px";
+    el.style.width=p.w+"px"; el.style.height=p.h+"px";
+    board.appendChild(el);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const cx=p.x+p.w/2-(r.left+r.width/2);
+      const cy=p.y+p.h/2-(r.top+r.height/2);
+      const dx=(cx===0?(Math.random()-.5)*80:Math.sign(cx)*(35+Math.random()*55));
+      const dy=(cy===0?(Math.random()-.5)*80:Math.sign(cy)*(35+Math.random()*55));
+      const rot=(Math.random()*220-110);
+      el.style.transform=`translate(${dx}px,${dy}px) rotate(${rot}deg)`;
+      el.style.opacity="0";
+    }));
+    setTimeout(()=>el.remove(),650);
+  });
+}
+
+function updateTestRegion(){
+  if(!regionBox || !allowedPositions.length) return;
+  regionBox.style.visibility="visible";
+
+  const xs=allowedPositions.map(p=>stringX(p.s));
+  const ys=allowedPositions.map(p=>noteY(p.f));
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const pad=22;
+
+  regionBox.style.left=(minX-pad)+"px";
+  regionBox.style.width=(maxX-minX+pad*2)+"px";
+  regionBox.style.top=(minY-pad)+"px";
+  regionBox.style.height=(maxY-minY+pad*2)+"px";
+}
+function flashPosition(item,on=true){
+  const dot=scaleDots.get(`${item.s}:${item.f}`);
+  if(dot) dot.classList.toggle("flash",on);
+}
+
+function showMark(item,wrong=false){
+  clearMark();
+  const m=document.createElement("div");
+  m.className="note-mark"+(wrong?" wrong":"");
+  m.style.left=stringX(item.s)+"px";
+  m.style.top=fretCenter(item.f)+"px";
+  m.textContent=wrong ? "☹️" : noteName(item.s,item.f);
+  board.appendChild(m); currentMark=m;
+  return m;
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function pcOf(s,f){ return ((midiAt(s,f)%12)+12)%12; }
+const C_MAJOR=new Set([0,2,4,5,7,9,11]);
+const C_MAJOR_PENT=new Set([0,2,4,7,9]);
+
+// Level shapes ------------------------------------------------------------
+// Fixed C-major / A-minor pentatonic system: C D E G A.
+//
+// Box numbering follows the user's convention:
+//   Box 1 starts on 6 (A) on low E
+//   Box 2 starts on 1 (C)
+//   Box 3 starts on 2 (D)
+//   Box 4 starts on 3 (E)
+//   Box 5 starts on 5 (G)
+//
+// The arrays below are the ACTUAL standard box positions, not rectangular
+// approximations. Open strings count as fret 0.
+//
+// Lowest complete occurrences within frets 0-15:
+const BOXES = [
+  // Box 1: A minor pentatonic box 1
+  [[0,5],[0,8],[1,5],[1,7],[2,5],[2,7],[3,5],[3,7],[4,5],[4,8],[5,5],[5,8]],
+  // Box 2
+  [[0,8],[0,10],[1,7],[1,10],[2,7],[2,10],[3,7],[3,9],[4,8],[4,10],[5,8],[5,10]],
+  // Box 3
+  [[0,10],[0,12],[1,10],[1,12],[2,10],[2,12],[3,9],[3,12],[4,10],[4,13],[5,10],[5,12]],
+  // Box 4: lowest complete occurrence uses open strings
+  [[0,0],[0,3],[1,0],[1,3],[2,0],[2,2],[3,0],[3,2],[4,1],[4,3],[5,0],[5,3]],
+  // Box 5
+  [[0,3],[0,5],[1,3],[1,5],[2,2],[2,5],[3,2],[3,5],[4,3],[4,5],[5,3],[5,5]]
+].map(box=>box.map(([s,f])=>({s,f})));
+
+const BOX_NAMES = [
+  "Box 1 · starts on 6 (A)",
+  "Box 2 · starts on 1 (C)",
+  "Box 3 · starts on 2 (D)",
+  "Box 4 · starts on 3 (E)",
+  "Box 5 · starts on 5 (G)"
+];
+
+let sessionShape=[];
+let sessionLabel="";
+
+function cloneShape(a){ return a.map(p=>({s:p.s,f:p.f})); }
+
+function shiftedBox(boxIndex, shift){
+  return BOXES[boxIndex].map(p=>({s:p.s,f:p.f+shift}));
+}
+function boxFits(box){
+  return box.every(p=>p.f>=0 && p.f<=TOTAL_FRETS);
+}
+
+// Return the occurrence of the NEXT box that lies immediately higher up the
+// neck than the chosen starting box. Box 3 -> Box 4 therefore uses Box 4 +12;
+// Box 4 -> Box 5 uses the low Box 5; Box 5 -> Box 1 uses low Box 1.
+function adjacentHigherBox(boxIndex){
+  const first=BOXES[boxIndex];
+  const nextIndex=(boxIndex+1)%5;
+  const firstMax=Math.max(...first.map(p=>p.f));
+
+  const candidates=[];
+  for(const shift of [0,12,24]){
+    const b=shiftedBox(nextIndex,shift);
+    if(!boxFits(b)) continue;
+    const bMax=Math.max(...b.map(p=>p.f));
+    const bMin=Math.min(...b.map(p=>p.f));
+    // Must genuinely extend the available territory upward.
+    if(bMax>firstMax && bMin<=firstMax+5) candidates.push(b);
+  }
+  candidates.sort((a,b)=>Math.max(...a.map(p=>p.f))-Math.max(...b.map(p=>p.f)));
+  return candidates[0] || null;
+}
+
+// Starting notes are the LOWEST box position on low E, A, or D.
+// Examples:
+// Box 1 -> A (E5), D (A5), G (D5)
+// Box 2 -> C (E8), E (A7), A (D7)
+function validStarts(boxIndex){
+  const box=BOXES[boxIndex];
+  const starts=[];
+  for(let st=0;st<=2;st++){
+    const pts=box.filter(p=>p.s===st).sort((a,b)=>pMidi(a)-pMidi(b));
+    if(pts.length) starts.push(pts[0]);
+  }
+  return starts;
+}
+function pMidi(p){ return midiAt(p.s,p.f); }
+
+// Union of the actual two box patterns. Overlap is intentional.
+function territoryFor(boxIndex){
+  const a=cloneShape(BOXES[boxIndex]);
+  const b=adjacentHigherBox(boxIndex);
+  if(!b) return null;
+  const m=new Map();
+  [...a,...b].forEach(p=>m.set(`${p.s}:${p.f}`,{s:p.s,f:p.f}));
+  return [...m.values()];
+}
+
+function nextPentMidi(m){
+  for(let x=m+1;x<=m+12;x++) if(C_MAJOR_PENT.has(((x%12)+12)%12)) return x;
+  return null;
+}
+
+// Enumerate legal physical choices for the immediately next pentatonic pitch.
+// No skipped strings. Same string is allowed. The global X-3 floor governs how far a route may move back toward the nut. No string gets >3 route notes.
+function nextChoices(route, territory, targetMidi){
+  const cur=route.at(-1);
+  const counts=new Map();
+  route.forEach(p=>counts.set(p.s,(counts.get(p.s)||0)+1));
+
+  // Global fret floor: once the route has reached fret X, nothing later
+  // may fall below X-3. This is based on the highest fret reached anywhere
+  // in the route, not merely the immediately preceding position.
+  const maxFretSoFar=Math.max(...route.map(p=>p.f));
+  const fretFloor=maxFretSoFar-3;
+
+  return territory.filter(p=>{
+    if(pMidi(p)!==targetMidi) return false;
+    if(route.some(q=>q.s===p.s&&q.f===p.f)) return false;
+    if(p.s<cur.s || p.s>cur.s+1) return false;       // never go down or skip a string
+    if((counts.get(p.s)||0)>=3) return false;        // max 3 positions/string
+    if(p.f<fretFloor) return false;                  // global X-3 rule
+    if(p.s===cur.s && p.f<=cur.f) return false;      // same string moves toward bridge
+    return true;
+  });
+}
+
+// Generate ALL legal ascending routes, then choose one randomly.
+// The pitch sequence never skips or repeats a pentatonic scale tone.
+// Stop at two octaves if reachable. Otherwise stop at the highest legal note
+// reachable within the two complete boxes.
+function allRoutes(boxIndex,start){
+  const territory=territoryFor(boxIndex);
+  if(!territory) return [];
+
+  const startMidi=pMidi(start);
+  const goalMidi=startMidi+24;
+  const completed=[];
+  let frontier=[[{s:start.s,f:start.f}]];
+
+  for(let step=0;step<20 && frontier.length;step++){
+    const nextFrontier=[];
+    for(const route of frontier){
+      const curMidi=pMidi(route.at(-1));
+
+      if(curMidi>=goalMidi){
+        completed.push(route);
+        continue;
+      }
+
+      const target=nextPentMidi(curMidi);
+      const choices=nextChoices(route,territory,target);
+
+      if(!choices.length){
+        const targetExistsInTerritory=territory.some(p=>pMidi(p)===target);
+        if(!targetExistsInTerritory){
+          // Genuine boundary cutoff: the next consecutive pentatonic pitch
+          // simply does not exist anywhere in these two complete boxes.
+          completed.push(route);
+        }
+        // Otherwise this particular fingering painted itself into a corner.
+        // Discard it; another branch may still produce the complete route.
+        continue;
+      }
+      for(const p of choices) nextFrontier.push([...route,{s:p.s,f:p.f}]);
+    }
+    frontier=nextFrontier;
+  }
+  completed.push(...frontier);
+
+  // Prefer routes that reach two octaves. If none do, use routes reaching the
+  // highest possible pitch. This exactly implements the agreed cutoff rule.
+  const twoOct=completed.filter(r=>pMidi(r.at(-1))>=goalMidi);
+  if(twoOct.length) return twoOct;
+
+  if(!completed.length) return [];
+  const highest=Math.max(...completed.map(r=>pMidi(r.at(-1))));
+  return completed.filter(r=>pMidi(r.at(-1))===highest);
+}
+
+function chooseSessionShape(level){
+  if(level===1){
+    const boxIndex=Math.floor(Math.random()*5);
+    sessionLabel=BOX_NAMES[boxIndex];
+    return cloneShape(BOXES[boxIndex]);
+  }
+
+  // Levels 2-6 map directly to starting Boxes 1-5.
+  const boxIndex=level-2;
+  const territory=territoryFor(boxIndex);
+  if(!territory){
+    sessionLabel=BOX_NAMES[boxIndex]+" · unavailable in 0–15";
+    return [];
+  }
+
+  // Randomly choose among low-E/A/D starts that produce at least one legal route.
+  const candidates=[];
+  for(const start of validStarts(boxIndex)){
+    const routes=allRoutes(boxIndex,start);
+    if(routes.length) candidates.push({start,routes});
+  }
+  if(!candidates.length){
+    sessionLabel=BOX_NAMES[boxIndex]+" · no legal route";
+    return [];
+  }
+
+  const chosen=candidates[Math.floor(Math.random()*candidates.length)];
+  const route=chosen.routes[Math.floor(Math.random()*chosen.routes.length)];
+  sessionLabel=`${BOX_NAMES[boxIndex]} · ${noteName(chosen.start.s,chosen.start.f)} start`;
+  return cloneShape(route);
+}
+
+function positionsForLevel(level){
+  return sessionShape.length ? sessionShape : chooseSessionShape(level);
+}
+
+function updateLevelVisuals(){
+  allowedPositions=sessionShape.length ? sessionShape : positionsForLevel(selectedLevel);
+  levelBtns.forEach(b=>b.classList.toggle('active',+b.dataset.level===selectedLevel));
+  const descs=[
+    "One complete box",
+    "Box 1 routes · starts on 6",
+    "Box 2 routes · starts on 1",
+    "Box 3 routes · starts on 2",
+    "Box 4 routes · starts on 3",
+    "Box 5 routes · starts on 5"
+  ];
+  levelDesc.textContent=sessionLabel || descs[selectedLevel-1];
+  scaleDots.forEach((dot,key)=>{
+    const [st,f]=key.split(':').map(Number);
+    const show=allowedPositions.some(p=>p.s===st&&p.f===f);
+    dot.style.display=show?'flex':'none';
+  });
+}
+function randomPosition(){
+  if(!allowedPositions.length) allowedPositions=positionsForLevel(selectedLevel);
+  let item;
+  do{
+    const p=allowedPositions[Math.floor(Math.random()*allowedPositions.length)];
+    item={s:p.s,f:p.f};
+  }while(sequence.length && item.s===sequence.at(-1).s && item.f===sequence.at(-1).f);
+  return item;
+}
+
+async function presentSequence(myToken){
+  accepting=false;
+  clearMark();
+  statusMain.textContent="Watch";
+  statusSub.textContent=`Sequence length: ${sequence.length}`;
+  await sleep(450);
+
+  // Longer sequences play progressively faster so a round does not become ponderous.
+  // Length 1 = 1200ms on / 300ms off; by length 10+ = 620ms on / 160ms off.
+  const progress=Math.min(1,(sequence.length-1)/9);
+  const noteMs=Math.round(1200-(580*progress));
+  const gapMs=Math.round(300-(140*progress));
+
+  for(const item of sequence){
+    if(myToken!==token) return;
+    flashPosition(item,true);
+    playTone(midiAt(item.s,item.f),Math.min(.38,noteMs/1000*.72));
+    await sleep(noteMs);
+    flashPosition(item,false);
+    await sleep(gapMs);
+  }
+  if(myToken!==token) return;
+  userIndex=0;
+  accepting=true;
+  micIgnoreUntil=performance.now()+220;
+  statusMain.textContent="Your turn";
+  statusSub.textContent=inputMode==="guitar"
+    ? `Play ${sequence.length} note${sequence.length===1?"":"s"} on the guitar.`
+    : `Repeat ${sequence.length} note${sequence.length===1?"":"s"}.`;
+  if(inputMode==="guitar") setMicStatus("listening","Mic: listening");
+}
+
+async function advance(){
+  const myToken=token;
+  accepting=false;
+  clearMark();
+  statusMain.textContent="Correct";
+  statusSub.textContent="Adding one note…";
+  await sleep(520);
+  if(myToken!==token) return;
+  sequence.push(randomPosition());
+  presentSequence(myToken);
+}
+
+
+async function handleGuitarMidi(heardMidi,heardFreq){
+  if(!accepting || !running || inputMode!=="guitar") return;
+
+  const expected=sequence[userIndex];
+  const expectedMidi=midiAt(expected.s,expected.f);
+  const right=(heardMidi===expectedMidi);
+
+  if(!right){
+    accepting=false;
+    setMicStatus("ready",`Mic: heard ${noteLabelFromMidi(heardMidi)}`);
+    await playWrongCue();
+    shatterRegion();
+
+    const completedLength=Math.max(0,sequence.length-1);
+    statusMain.textContent="Game over";
+    statusSub.textContent=`Heard ${noteLabelFromMidi(heardMidi)} · expected ${noteLabelFromMidi(expectedMidi)}`;
+    const myToken=token;
+
+    await sleep(600);
+    await restoreFullBoard();
+    if(myToken!==token) return;
+
+    await sleep(2000);
+    if(myToken!==token) return;
+
+    token++;
+    sessionShape=chooseSessionShape(selectedLevel);
+    allowedPositions=sessionShape;
+    updateLevelVisuals();
+    updateTestRegion();
+    sequence=[];
+    userIndex=0;
+    sequence.push(randomPosition());
+    statusMain.textContent="New region";
+    statusSub.textContent=sessionLabel;
+    const newToken=token;
+    await sleep(700);
+    if(newToken!==token) return;
+    focusTestRegion();
+    await sleep(1200);
+    if(newToken===token) presentSequence(newToken);
+    return;
+  }
+
+  // Correct guitar pitch: flash the expected fretboard position as confirmation.
+  flashPosition(expected,true);
+  userIndex++;
+  if(userIndex===sequence.length) await playSuccessCue();
+
+  const userHoldMs=Math.max(620,1200-Math.round(Math.min(1,(sequence.length-1)/9)*580));
+  await sleep(userHoldMs);
+  flashPosition(expected,false);
+
+  if(userIndex===sequence.length){
+    advance();
+  }else{
+    setMicStatus("listening","Mic: listening");
+  }
+}
+
+async function handleUserNote(s,f){
+  if(!accepting || !running) return;
+  ensureAudio();
+  const item={s,f};
+  const expected=sequence[userIndex];
+  const right=(s===expected.s && f===expected.f);
+  flashPosition(item,true);
+  if(right) playTone(midiAt(s,f),.30);
+
+  if(!right){
+    playWrongCue();
+    shatterRegion();
+    accepting=false;
+    const completedLength=Math.max(0,sequence.length-1);
+    statusMain.textContent="Game over";
+    statusSub.textContent=`You reached ${completedLength} note${completedLength===1?"":"s"}.`;
+    const myToken=token;
+    await sleep(600);
+    flashPosition(item,false);
+    await restoreFullBoard();
+    if(myToken!==token) return;
+
+    // Once fully zoomed out, keep the complete fretboard visible for two seconds.
+    await sleep(2000);
+    if(myToken!==token) return;
+
+    // New Simon session: choose a fresh region, show it on the full board,
+    // then enlarge and center that region for play.
+    token++;
+    sessionShape=chooseSessionShape(selectedLevel);
+    allowedPositions=sessionShape;
+    updateLevelVisuals();
+    updateTestRegion();
+    sequence=[];
+    userIndex=0;
+    sequence.push(randomPosition());
+    statusMain.textContent="New region";
+    statusSub.textContent=sessionLabel;
+    const newToken=token;
+    await sleep(700);
+    if(newToken!==token) return;
+    focusTestRegion();
+    await sleep(1200);
+    if(newToken===token) presentSequence(newToken);
+    return;
+  }
+
+  userIndex++;
+  if(userIndex===sequence.length) playSuccessCue();
+  const userHoldMs=Math.max(620,1200-Math.round(Math.min(1,(sequence.length-1)/9)*580));
+  await sleep(userHoldMs);
+  flashPosition(item,false);
+
+  if(userIndex===sequence.length){
+    advance();
+  }
+}
+
+async function startGame(){
+  await ensureAudio();
+  if(inputMode==="guitar"){
+    const micOK=await enableMicrophone();
+    if(!micOK){
+      statusMain.textContent="Microphone unavailable";
+      statusSub.textContent="Use HTTPS and allow microphone access, or switch to Tap.";
+      return;
+    }
+  }
+  token++;
+  // Choose one contiguous four-fret range for this entire growing sequence.
+  // Possible windows are frets 1–4 through 12–15.
+  sessionShape=chooseSessionShape(selectedLevel);
+  allowedPositions=sessionShape;
+  updateLevelVisuals();
+  updateTestRegion();
+  running=true; accepting=false; sequence=[]; userIndex=0;
+  sequence=[randomPosition()];
+  statusMain.textContent="Region";
+  statusSub.textContent=sessionLabel;
+  setTimeout(()=>{
+    if(running){
+      focusTestRegion();
+      setTimeout(()=>presentSequence(token),1200);
+    }
+  },650);
+}
+startBtn.addEventListener("click",startGame);
+
+tapModeBtn.addEventListener("click",async()=>{
+  if(inputMode==="tap") return;
+  inputMode="tap";
+  tapModeBtn.classList.add("active");
+  guitarModeBtn.classList.remove("active");
+  token++; running=false; accepting=false; sequence=[];
+  stopMicrophone();
+  await restoreFullBoard();
+  statusMain.textContent="Tap mode";
+  statusSub.textContent="Tap the fret positions to answer.";
+});
+
+guitarModeBtn.addEventListener("click",async()=>{
+  inputMode="guitar";
+  guitarModeBtn.classList.add("active");
+  tapModeBtn.classList.remove("active");
+  token++; running=false; accepting=false; sequence=[];
+  await restoreFullBoard();
+
+  const ok=await enableMicrophone();
+  if(ok){
+    statusMain.textContent="Guitar mode";
+    statusSub.textContent="Press Start. Play the displayed pitches on guitar.";
+  }else{
+    statusMain.textContent="Microphone unavailable";
+    statusSub.textContent="Open from GitHub Pages over HTTPS and allow microphone access.";
+  }
+});
+
+audioTestBtn.addEventListener("click",async()=>{
+  const ok=await ensureAudio();
+  if(!ok) return;
+  const t=audioCtx.currentTime+.03;
+  playCueTone(523.25,t,.18,.13,"sine");
+  playCueTone(659.25,t+.20,.22,.13,"sine");
+});
+
+["pointerdown","touchstart"].forEach(ev=>{
+  startBtn.addEventListener(ev,()=>{ ensureAudio(); },{passive:true});
+  audioTestBtn.addEventListener(ev,()=>{ ensureAudio(); },{passive:true});
+});
+document.addEventListener("visibilitychange",async()=>{
+  if(!document.hidden && audioCtx && audioCtx.state==="suspended"){
+    try{ await audioCtx.resume(); }catch(e){}
+    setAudioStatus(audioCtx.state==="running"?"ready":"blocked",
+      audioCtx.state==="running"?"Audio: ready":"Audio: blocked — tap Test Sound");
+  }
+  if(!document.hidden && inputMode==="guitar" && micAnalyser) startMicLoop();
+});
+
+levelBtns.forEach(btn=>btn.addEventListener("click",async()=>{
+  selectedLevel=+btn.dataset.level;
+  token++; running=false; accepting=false; sequence=[]; sessionShape=[];
+  micCandidateMidi=null; micCandidateSince=0; micLockedUntilRelease=false; micLastAcceptedMidi=null;
+  await restoreFullBoard();
+  sessionShape=chooseSessionShape(selectedLevel);
+  allowedPositions=sessionShape;
+  updateLevelVisuals(); updateTestRegion();
+  statusMain.textContent=`Level ${selectedLevel}`;
+  statusSub.textContent=levelDesc.textContent;
+}));
+sessionShape=chooseSessionShape(selectedLevel);
+allowedPositions=sessionShape;
+updateLevelVisuals();
+updateTestRegion();
+
+</script>
+</body>
+</html>
