@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-<title>Fretboard Simon 2.3 Guitar Input</title>
+<title>Fretboard Simon 2.4 Fast Guitar Input</title>
 <style>
 :root{
   --bg:#070c13; --panel:#111a26; --border:#344152; --text:#e9eef7;
@@ -555,26 +555,33 @@ function stopMicrophone(){
 // YIN-style monophonic pitch detector, tuned for standard guitar range.
 // Returns Hz or null. Guitar range here is ~E2 through the top of this 15-fret board.
 function detectGuitarPitch(buf,sampleRate){
-  const N=buf.length;
+  const DS=2;
+  const N=Math.floor(buf.length/DS);
+  const sr=sampleRate/DS;
+
   let mean=0;
-  for(let i=0;i<N;i++) mean+=buf[i];
+  const raw=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const v=(buf[i*DS]+buf[i*DS+1])*0.5;
+    raw[i]=v;
+    mean+=v;
+  }
   mean/=N;
 
   let rms=0;
   const x=new Float32Array(N);
   for(let i=0;i<N;i++){
-    const v=buf[i]-mean;
-    // light Hann window
+    const centered=raw[i]-mean;
     const w=.5-.5*Math.cos((2*Math.PI*i)/(N-1));
-    x[i]=v*w;
-    rms+=v*v;
+    x[i]=centered*w;
+    rms+=centered*centered;
   }
   rms=Math.sqrt(rms/N);
-  if(rms<0.012) return null;
+  if(rms<0.010) return null;
 
   const minFreq=72, maxFreq=900;
-  const tauMin=Math.max(2,Math.floor(sampleRate/maxFreq));
-  const tauMax=Math.min(Math.floor(sampleRate/minFreq),Math.floor(N/2)-1);
+  const tauMin=Math.max(2,Math.floor(sr/maxFreq));
+  const tauMax=Math.min(Math.floor(sr/minFreq),Math.floor(N/2)-1);
   const diff=new Float32Array(tauMax+1);
 
   for(let tau=1;tau<=tauMax;tau++){
@@ -592,13 +599,13 @@ function detectGuitarPitch(buf,sampleRate){
   let bestVal=1e9;
   for(let tau=1;tau<=tauMax;tau++){
     running+=diff[tau];
-    const cmnd = running>0 ? diff[tau]*tau/running : 1;
+    const cmnd=running>0 ? diff[tau]*tau/running : 1;
     diff[tau]=cmnd;
     if(tau>=tauMin && cmnd<bestVal){
-      bestVal=cmnd; bestTau=tau;
+      bestVal=cmnd;
+      bestTau=tau;
     }
-    if(tau>=tauMin && cmnd<0.16){
-      // first local valley under threshold
+    if(tau>=tauMin && cmnd<0.18){
       if(tau===tauMax || diff[tau+1]>=cmnd){
         bestTau=tau;
         break;
@@ -606,33 +613,32 @@ function detectGuitarPitch(buf,sampleRate){
     }
   }
 
-  if(bestTau<0 || bestVal>0.34) return null;
+  if(bestTau<0 || bestVal>0.38) return null;
 
-  // Parabolic interpolation around the valley.
   let tau=bestTau;
   if(tau>1 && tau<tauMax){
     const y0=diff[tau-1], y1=diff[tau], y2=diff[tau+1];
     const denom=(2*y1-y2-y0);
     if(Math.abs(denom)>1e-9) tau += .5*(y2-y0)/denom;
   }
-  const freq=sampleRate/tau;
+
+  const freq=sr/tau;
   return (freq>=minFreq && freq<=maxFreq) ? freq : null;
 }
-
 function startMicLoop(){
   if(micTimer) return;
 
   const loop=async()=>{
     micTimer=null;
     if(!micAnalyser || inputMode!=="guitar"){
-      if(micAnalyser && inputMode==="guitar") micTimer=setTimeout(loop,70);
+      if(micAnalyser && inputMode==="guitar") micTimer=setTimeout(loop,35);
       return;
     }
 
     // Only interpret guitar notes while the player is actually answering.
     if(!running || !accepting || micBusy || performance.now()<micIgnoreUntil){
       micCandidateMidi=null; micCandidateSince=0;
-      micTimer=setTimeout(loop,70);
+      micTimer=setTimeout(loop,35);
       return;
     }
 
@@ -644,14 +650,14 @@ function startMicLoop(){
       micCandidateMidi=null; micCandidateSince=0;
       if(micLockedUntilRelease){
         if(!micSilenceSince) micSilenceSince=now;
-        if(now-micSilenceSince>=120){
+        if(now-micSilenceSince>=70){
           micLockedUntilRelease=false;
           micLastAcceptedMidi=null;
           micSilenceSince=0;
         }
       }
       setMicStatus("listening","Mic: listening");
-      micTimer=setTimeout(loop,70);
+      micTimer=setTimeout(loop,35);
       return;
     }
 
@@ -664,7 +670,7 @@ function startMicLoop(){
     if(Math.abs(cents)>48){
       micCandidateMidi=null; micCandidateSince=0;
       setMicStatus("listening","Mic: listening");
-      micTimer=setTimeout(loop,70);
+      micTimer=setTimeout(loop,35);
       return;
     }
 
@@ -677,7 +683,7 @@ function startMicLoop(){
         micLockedUntilRelease=false;
         micLastAcceptedMidi=null;
       }else{
-        micTimer=setTimeout(loop,70);
+        micTimer=setTimeout(loop,35);
         return;
       }
     }
@@ -685,12 +691,12 @@ function startMicLoop(){
     if(micCandidateMidi!==midi){
       micCandidateMidi=midi;
       micCandidateSince=now;
-      micTimer=setTimeout(loop,70);
+      micTimer=setTimeout(loop,35);
       return;
     }
 
     // Require ~180 ms of stable pitch before accepting it.
-    if(now-micCandidateSince>=180){
+    if(now-micCandidateSince>=100){
       micCandidateMidi=null; micCandidateSince=0;
       micLockedUntilRelease=true;
       micLastAcceptedMidi=midi;
@@ -699,10 +705,10 @@ function startMicLoop(){
       micBusy=false;
     }
 
-    micTimer=setTimeout(loop,70);
+    micTimer=setTimeout(loop,35);
   };
 
-  micTimer=setTimeout(loop,70);
+  micTimer=setTimeout(loop,35);
 }
 
 function playCueTone(freq,start,duration,peak=.15,type="sine"){
@@ -1148,7 +1154,7 @@ async function presentSequence(myToken){
   if(myToken!==token) return;
   userIndex=0;
   accepting=true;
-  micIgnoreUntil=performance.now()+220;
+  micIgnoreUntil=performance.now()+80;
   statusMain.textContent="Your turn";
   statusSub.textContent=inputMode==="guitar"
     ? `Play ${sequence.length} note${sequence.length===1?"":"s"} on the guitar.`
@@ -1213,16 +1219,21 @@ async function handleGuitarMidi(heardMidi,heardFreq){
     return;
   }
 
-  // Correct guitar pitch: flash the expected fretboard position as confirmation.
+  // Correct guitar pitch: acknowledge quickly. The microphone lockout already
+  // prevents one sustained note from being counted repeatedly.
   flashPosition(expected,true);
   userIndex++;
-  if(userIndex===sequence.length) await playSuccessCue();
 
-  const userHoldMs=Math.max(620,1200-Math.round(Math.min(1,(sequence.length-1)/9)*580));
-  await sleep(userHoldMs);
+  const finished=(userIndex===sequence.length);
+  if(finished){
+    accepting=false;
+    await playSuccessCue();
+  }
+
+  await sleep(finished ? 260 : 140);
   flashPosition(expected,false);
 
-  if(userIndex===sequence.length){
+  if(finished){
     advance();
   }else{
     setMicStatus("listening","Mic: listening");
